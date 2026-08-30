@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentictqa"
+version = "0.1.0"
+description = "A minimal, auditable agentic pipeline for open-domain table question answering."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+dependencies = [
+  "openai>=1.30,<3",
+  "pandas>=2.0,<3",
+  "python-dotenv>=1.0,<2",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.6"]
+
+[project.scripts]
+agentictqa = "agentictqa.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+agentictqa = [
+  "resources/fetaqa_10/*.jsonl",
+  "resources/fetaqa_10/*.md",
+  "resources/fetaqa_10/tables/*.csv",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
