@@ -79,19 +79,6 @@ committed 10-question prediction file:
 agentictqa evaluate
 ```
 
-Expected macro-F1 values (the CLI also reports precision and recall):
-
-```json
-{
-  "count": 10,
-  "metrics": {
-    "ROUGE-1": {"f1": 0.6183023105416839},
-    "ROUGE-2": {"f1": 0.4318393726319961},
-    "ROUGE-L": {"f1": 0.5160935719888268}
-  }
-}
-```
-
 ### Run ArrTab with cached retrieval
 
 Configure an OpenAI-compatible model endpoint, then replay the ranked table IDs
@@ -141,20 +128,6 @@ CUDA_VISIBLE_DEVICES=0 agentictqa run \
 
 The live wrapper loads the retrieval stack once per batch and preserves dense
 candidates, reranking inputs, and fusion traces under `outputs/retriever/`.
-See [RETRIEVER.md](RETRIEVER.md) for the stage-by-stage execution path and
-custom asset options.
-
-## Results
-
-Open-domain FeTaQA results use ROUGE F1.
-
-| Evaluation | Questions | ROUGE-1 | ROUGE-2 | ROUGE-L |
-|---|---:|---:|---:|---:|
-| ArrTab, paper result | Full experiment | **0.6490** | **0.4503** | **0.5331** |
-| Released prediction trace | 10 | 0.6183 | 0.4318 | 0.5161 |
-
-The 10-question trace is provided for code-path verification and is not a
-replacement for the full benchmark estimate.
 
 ## Repository structure
 
@@ -174,7 +147,6 @@ ArrTab/
 │       ├── runner.py
 │       └── legacy/
 ├── tests/
-├── RETRIEVER.md
 └── pyproject.toml
 ```
 
