@@ -9,6 +9,6 @@
 - Metric: macro average of the original lowercased Unicode ROUGE-1, ROUGE-2, and
   ROUGE-L implementation.
 
-The sample exposes retrieval failures rather than adding missing gold tables.
-For example, the relevant table for question 28 is not among its cached top-10
-candidates. This is intentional: the slice is an open-domain evaluation.
+The sample preserves natural retrieval failures without substituting manually
+selected tables. For example, the relevant table for question 28 is not among
+its cached top-10 candidates. This is intentional for open-domain evaluation.

@@ -1,4 +1,4 @@
-"""Minimal AgenticTQA release package."""
+"""ArrTab: agentic retrieval and reasoning on tables."""
 
 from .metrics import evaluate_rouge
 

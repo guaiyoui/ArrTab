@@ -1,4 +1,4 @@
-"""Minimal AgenticTQA pipeline: retrieve, plan, SQL, execute, answer."""
+"""ArrTab pipeline: retrieve, integrate, extract, and answer."""
 
 from __future__ import annotations
 

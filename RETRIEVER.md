@@ -1,12 +1,11 @@
-# Open-domain retriever
+# MuRe: self-supervised multi-table retrieval
 
-This release includes the inference path called by the original
-`AgenticTQA/agent_team/agents.py`. The old entry point called
-`tools.data_acquision.tester.main(query)`; the release wrapper in
-`src/agentictqa/retriever/runner.py` preserves the same stages while replacing
-machine-specific paths and destructive temporary-directory cleanup.
+MuRe is the retrieval component of ArrTab. The implementation in
+`src/agentictqa/retriever/legacy/` follows the inference path used in the
+FeTaQA experiments, while `src/agentictqa/retriever/runner.py` provides
+configurable paths, batch execution, and non-destructive trace handling.
 
-## Execution flow
+## Retrieval pipeline
 
 ```text
 question batch
@@ -19,29 +18,27 @@ question batch
   → top 10 unique table IDs
 ```
 
-The committed `retrieval_cache.jsonl` stores the last line of this process for
-the 10 release questions. It is an open-domain cache: it contains only retrieved
-IDs and has no reference/gold-table field.
+The BNN fusion reranker combines passage and table representations with the
+FiD-derived feature representation. Its trained FeTaQA state dict is included
+at `checkpoints/fetaqa_fusion.pt` and is the default for `--retrieval live`.
 
-## Original-to-release path mapping
+## Required assets
 
-| Original path | Release CLI path |
+Only the trained FeTaQA fusion checkpoint is included. Supply the following
+base-model directories, index files, and table catalog for live retrieval:
+
+| Component | Default path |
 |---|---|
-| `models/student_tqa_retriever_step_29500` | `<assets-root>/models/student_tqa_retriever_step_29500` |
-| `models/tqa_retriever` | `<assets-root>/models/tqa_retriever` |
-| `models/tqa_reader_base` | `<assets-root>/models/tqa_reader_base` |
-| `index/on_disk_index_FeTaQA_rel_graph` | `<assets-root>/index/on_disk_index_FeTaQA_rel_graph` |
-| best FeTaQA `sql_1_...pt` | `--fusion-checkpoint` |
-| `datasets_agentic_tqa/FeTaQA/labels/tables_numid.jsonl` | `<dataset-root>/FeTaQA/labels/tables_numid.jsonl` |
+| Student query encoder | `<assets-root>/models/student_tqa_retriever_step_29500` |
+| Teacher passage reranker | `<assets-root>/models/tqa_retriever` |
+| FiD reader | `<assets-root>/models/tqa_reader_base` |
+| Relation-graph FAISS index | `<assets-root>/index/on_disk_index_FeTaQA_rel_graph` |
+| FeTaQA fusion checkpoint | `checkpoints/fetaqa_fusion.pt` (included) |
+| FeTaQA table catalog | `<dataset-root>/FeTaQA/labels/tables_numid.jsonl` |
 
-The original FeTaQA `best_metric_info.json` points to
-`sql_1_epoc_5_step_1614_model_8_14_2025.pt`. Copy or symlink that file to the
-path supplied with `--fusion-checkpoint`.
+Use `--fusion-checkpoint PATH` to evaluate a different fusion checkpoint.
 
-## Commands
-
-Validate the asset layout as part of a live run and recompute the 10-question
-cache:
+## Live retrieval
 
 ```bash
 python -m pip install -e '.[retriever]'
@@ -49,13 +46,22 @@ CUDA_VISIBLE_DEVICES=0 agentictqa run \
   --retrieval live \
   --assets-root retriever_assets \
   --dataset-root datasets_agentic_tqa \
-  --fusion-checkpoint retriever_assets/checkpoints/fetaqa_fusion.pt \
   --top-k 5 \
   --write-retrieval-cache outputs/fetaqa_10_retrieval.jsonl \
   --output outputs/fetaqa_10_live.jsonl
 ```
 
-Replay a newly generated cache without loading any retrieval model:
+The wrapper batches all requested questions so models and the index are loaded
+once. Each invocation creates a unique directory under `outputs/retriever/` and
+keeps the query, dense candidate, tagged candidate, and fusion files for
+inspection. The legacy model code addresses CUDA device 0 internally; expose
+the desired GPU with `CUDA_VISIBLE_DEVICES`.
+
+## Cached retrieval
+
+`src/agentictqa/resources/fetaqa_10/retrieval_cache.jsonl` contains the ranked
+MuRe output for the released FeTaQA examples. Replay any compatible cache
+without loading the retrieval stack:
 
 ```bash
 agentictqa run \
@@ -64,8 +70,4 @@ agentictqa run \
   --output outputs/fetaqa_10_replay.jsonl
 ```
 
-The live wrapper batches all requested questions so model and index loading is
-not repeated per example. A unique run directory is created for every
-invocation, retaining the intermediate JSONL files for inspection. The legacy
-model code addresses CUDA device 0 internally, so expose the desired single GPU
-with `CUDA_VISIBLE_DEVICES` as shown above.
+Each cache row is keyed by question and contains retrieved table IDs only.

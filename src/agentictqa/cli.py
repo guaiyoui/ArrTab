@@ -9,6 +9,10 @@ from pathlib import Path
 from .data import FeTaQA10, legacy_predictions_path
 from .metrics import evaluate_rouge
 
+DEFAULT_FUSION_CHECKPOINT = (
+    Path(__file__).resolve().parents[2] / "checkpoints" / "fetaqa_fusion.pt"
+)
+
 
 def _read_jsonl(path: Path) -> list[dict]:
     with path.open(encoding="utf-8") as handle:
@@ -38,7 +42,9 @@ def _evaluate(path: Path) -> dict:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Minimal AgenticTQA FeTaQA release")
+    parser = argparse.ArgumentParser(
+        description="ArrTab: agentic open-domain tabular question answering"
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     evaluate = subparsers.add_parser("evaluate", help="Evaluate a JSONL prediction file")
@@ -80,8 +86,8 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--fusion-checkpoint",
         type=Path,
-        default=None,
-        help="FeTaQA BNN fusion-reranker checkpoint required by --retrieval live",
+        default=DEFAULT_FUSION_CHECKPOINT,
+        help="FeTaQA MuRe BNN fusion checkpoint (default: bundled checkpoint)",
     )
     run.add_argument(
         "--retriever-work-dir",
@@ -122,14 +128,11 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     if args.retrieval == "live":
-        fusion_checkpoint = args.fusion_checkpoint or (
-            args.assets_root / "checkpoints" / "fetaqa_fusion.pt"
-        )
         retriever = LegacyOpenDomainRetriever(
             LegacyRetrieverConfig(
                 assets_root=args.assets_root,
                 dataset_root=args.dataset_root,
-                fusion_checkpoint=fusion_checkpoint,
+                fusion_checkpoint=args.fusion_checkpoint,
                 work_dir=args.retriever_work_dir,
             )
         )

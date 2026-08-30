@@ -1,15 +1,27 @@
+import hashlib
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
+from agentictqa.cli import DEFAULT_FUSION_CHECKPOINT
 from agentictqa.data import FeTaQA10, legacy_predictions_path
 from agentictqa.metrics import evaluate_rouge, tokenize
 from agentictqa.pipeline import _validate_read_only_sql, clean_answer
 from agentictqa.retriever import CachedOpenDomainRetriever, LegacyRetrieverConfig
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+FETAQA_CHECKPOINT_SHA256 = "533d583a1a4357bd5464aebf77da0e4571cd1c366d187ac6098edfe7593da047"
+
 
 class ReleaseTest(unittest.TestCase):
+    def test_fetaqa_fusion_checkpoint_is_released_intact(self):
+        checkpoint = REPOSITORY_ROOT / "checkpoints" / "fetaqa_fusion.pt"
+        self.assertEqual(DEFAULT_FUSION_CHECKPOINT, checkpoint)
+        self.assertEqual(checkpoint.stat().st_size, 37_780_125)
+        digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+        self.assertEqual(digest, FETAQA_CHECKPOINT_SHA256)
+
     def test_dataset_is_complete(self):
         dataset = FeTaQA10()
         examples = dataset.examples()
