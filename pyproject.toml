@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "A minimal, auditable agentic pipeline for open-domain table question answering."
 readme = "README.md"
 requires-python = ">=3.10"
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 dependencies = [
   "openai>=1.30,<3",
   "pandas>=2.0,<3",
@@ -17,6 +18,15 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["ruff>=0.6"]
+retriever = [
+  "faiss-cpu>=1.8,<2",
+  "numpy>=1.26,<2",
+  "regex>=2024.11.6",
+  "sentencepiece>=0.2,<1",
+  "torch>=2.1,<3",
+  "tqdm>=4.67,<5",
+  "transformers==4.45.0",
+]
 
 [project.scripts]
 agentictqa = "agentictqa.cli:main"
@@ -32,8 +42,10 @@ agentictqa = [
   "resources/fetaqa_10/*.jsonl",
   "resources/fetaqa_10/*.md",
   "resources/fetaqa_10/tables/*.csv",
+  "retriever/legacy/*.md",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+extend-exclude = ["src/agentictqa/retriever/legacy"]

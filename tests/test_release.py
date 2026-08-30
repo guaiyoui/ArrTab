@@ -1,24 +1,45 @@
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from agentictqa.data import FeTaQA10, legacy_predictions_path
 from agentictqa.metrics import evaluate_rouge, tokenize
 from agentictqa.pipeline import _validate_read_only_sql, clean_answer
+from agentictqa.retriever import CachedOpenDomainRetriever, LegacyRetrieverConfig
 
 
 class ReleaseTest(unittest.TestCase):
     def test_dataset_is_complete(self):
         dataset = FeTaQA10()
         examples = dataset.examples()
+        retriever = CachedOpenDomainRetriever()
         self.assertEqual([row.id for row in examples], list(range(21, 31)))
-        self.assertEqual(len(list(dataset.tables_dir.glob("*.csv"))), 100)
+        self.assertEqual(len(list(dataset.tables_dir.glob("*.csv"))), 95)
         for example in examples:
-            for table_id in example.candidate_ids:
+            table_ids = retriever.retrieve_ids(example, top_k=10)
+            for table_id in table_ids:
                 dataset.load_table(table_id)
-            self.assertEqual(
-                [table.id for table in dataset.retrieve(example, mode="oracle")],
-                list(example.reference_table_ids),
+
+    def test_cache_is_question_keyed_and_open_domain_only(self):
+        dataset = FeTaQA10()
+        retriever = CachedOpenDomainRetriever()
+        example = dataset.examples(ids=[21])[0]
+        self.assertEqual(retriever.retrieve_ids(example, 2), ["31", "32"])
+        with (dataset.root / "questions.jsonl").open(encoding="utf-8") as handle:
+            for line in handle:
+                self.assertEqual(set(json.loads(line)), {"id", "question", "answer"})
+
+    def test_live_retriever_checks_external_assets_without_importing_ml_stack(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config = LegacyRetrieverConfig(
+                assets_root=root / "assets",
+                dataset_root=root / "datasets",
+                fusion_checkpoint=root / "fusion.pt",
             )
+            with self.assertRaisesRegex(FileNotFoundError, "Missing retriever assets"):
+                config.validate()
 
     def test_archived_metrics_are_reproduced(self):
         dataset = FeTaQA10()

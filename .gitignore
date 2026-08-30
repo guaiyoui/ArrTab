@@ -8,3 +8,5 @@ build/
 dist/
 outputs/*
 !outputs/.gitkeep
+retriever_assets/
+datasets_agentic_tqa/

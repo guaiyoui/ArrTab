@@ -6,7 +6,7 @@ import re
 import sqlite3
 import time
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Protocol
 
 import pandas as pd
 
@@ -14,12 +14,18 @@ from .data import Example, FeTaQA10, Table
 from .llm import LLM
 
 
+class Retriever(Protocol):
+    source: str
+
+    def retrieve_ids(self, example: Example, top_k: int) -> list[str]: ...
+
+
 @dataclass
 class RunResult:
     id: int
     question: str
     prediction: str
-    retrieval_mode: str
+    retrieval_source: str
     candidate_table_ids: list[str]
     selected_table_ids: list[str]
     plan: dict[str, Any]
@@ -76,20 +82,18 @@ class AgenticTQAPipeline:
         self,
         dataset: FeTaQA10,
         llm: LLM,
+        retriever: Retriever,
         *,
         top_k: int = 5,
         max_sql_retries: int = 2,
         allow_parametric_fallback: bool = True,
-        retrieval_mode: str = "cached",
     ) -> None:
         self.dataset = dataset
         self.llm = llm
+        self.retriever = retriever
         self.top_k = top_k
         self.max_sql_retries = max_sql_retries
         self.allow_parametric_fallback = allow_parametric_fallback
-        if retrieval_mode not in {"cached", "oracle"}:
-            raise ValueError("retrieval_mode must be 'cached' or 'oracle'")
-        self.retrieval_mode = retrieval_mode
 
     def _plan(self, question: str, candidates: dict[str, Table]) -> dict[str, Any]:
         plan = self.llm.json(
@@ -207,7 +211,10 @@ Answer policy: {answer_policy}""",
         started = time.perf_counter()
         calls_before = self.llm.calls
 
-        retrieved = self.dataset.retrieve(example, self.top_k, mode=self.retrieval_mode)
+        table_ids = self.retriever.retrieve_ids(example, self.top_k)
+        if not table_ids:
+            raise RuntimeError(f"Retriever returned no tables for question {example.id}")
+        retrieved = [self.dataset.load_table(table_id) for table_id in table_ids]
         candidates = {f"t{index}": table for index, table in enumerate(retrieved)}
         plan = self._plan(example.question, candidates)
         selected = {alias: candidates[alias] for alias in plan["selected_tables"]}
@@ -238,7 +245,7 @@ Answer policy: {answer_policy}""",
             id=example.id,
             question=example.question,
             prediction=prediction,
-            retrieval_mode=self.retrieval_mode,
+            retrieval_source=self.retriever.source,
             candidate_table_ids=[table.id for table in retrieved],
             selected_table_ids=[table.id for table in selected.values()],
             plan=plan,

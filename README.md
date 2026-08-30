@@ -1,21 +1,11 @@
-# ArrTab — minimal AgenticTQA FeTaQA release
+# ArrTab
 
-This folder is a self-contained, auditable release of the original AgenticTQA
-FeTaQA experiment. It keeps the method's essential stages while removing
-training code, large indexes, checkpoints, logs, duplicate dataset adapters,
-and machine-specific paths.
+Minimal release of the AgenticTQA open-domain FeTaQA pipeline. The repository
+contains the original retriever implementation, its cached output for the 10
+FeTaQA examples used by the experiment, and a compact table integration and
+answering pipeline. Every committed result uses open-domain retrieval.
 
-The release contains:
-
-- the exact 10 questions used by the original script (FeTaQA IDs 21–30);
-- the original cached top-10 retrieval results, 95 candidate tables, and 5
-  separately isolated oracle-debug tables;
-- a small retrieve → integration-plan → SQL → answer pipeline;
-- the original macro ROUGE implementation used by the archived run;
-- per-question predictions from the complete 2025-09-28 run;
-- offline tests and a live OpenAI-compatible API entry point.
-
-## Reproduce the archived result (no API required)
+## Reproduce the cached open-domain score
 
 ```bash
 git clone https://github.com/guaiyoui/ArrTab.git
@@ -26,129 +16,110 @@ python -m pip install -e .
 agentictqa evaluate
 ```
 
-Expected F1 scores:
+Expected macro F1 over FeTaQA IDs 21–30:
 
-| Evidence | Questions | ROUGE-1 | ROUGE-2 | ROUGE-L |
-|---|---:|---:|---:|---:|
-| Archived predictions (`index_v3.log`) | 10 | 0.6183 | 0.4318 | 0.5161 |
-| Paper-reported target (artifact unavailable) | 10 (assumed) | 0.6490 | 0.4503 | 0.5331 |
-| Verified oracle diagnostic (Qwen3-235B) | 10 | 0.6747 | 0.4609 | 0.5587 |
+| Artifact | ROUGE-1 | ROUGE-2 | ROUGE-L |
+|---|---:|---:|---:|
+| Archived open-domain run | 0.6183 | 0.4318 | 0.5161 |
+| Paper-reported result | 0.6490 | 0.4503 | 0.5331 |
 
-The first row is reproducible from committed per-question predictions. The
-second row is retained only as a paper-reported target: the original repository
-contains the numbers in LaTeX and plotting files, but no matching prediction
-artifact. This release therefore does **not** present that row as independently
-reproduced. The third row verifies the downstream implementation but uses gold
-tables, so it is not an open-domain comparison; see [results/README.md](results/README.md).
+The first row is exactly reproducible from the committed per-question
+predictions. The second row is retained as the number reported in the paper;
+the original working directory does not contain the matching prediction file,
+so this release does not relabel it as reproduced.
 
-The metric intentionally preserves the archived run's lowercased Unicode
-tokenizer. This matters: a later file in the working repository uses a different
-ASCII-oriented tokenizer and cannot reproduce the logged values for names such
-as `Chávez` and `Årdal`.
-
-## Run the live pipeline
-
-Copy the environment template and add a key for an OpenAI-compatible service:
+## Run with the cached open-domain retrieval
 
 ```bash
 cp .env.example .env
-agentictqa run --ids 21 22 --output outputs/smoke.jsonl
-```
-
-To run all 10 questions:
-
-```bash
-agentictqa run --output outputs/fetaqa_10.jsonl
+agentictqa run --retrieval cached --output outputs/fetaqa_10.jsonl
 agentictqa evaluate --predictions outputs/fetaqa_10.jsonl
 ```
 
-Configuration can be supplied in `.env` or as CLI flags:
+The cache is the ranked output of the original open-domain retriever, not gold
+table injection. `--top-k 5` is the default used by the original agent; use
+`--top-k 10` to expose every cached candidate.
 
-```bash
-AGENTICTQA_API_KEY=... \
-agentictqa run \
-  --model Qwen/Qwen3-30B-A3B-Instruct-2507 \
-  --base-url https://api.studio.nebius.com/v1/ \
-  --top-k 5
-```
+## Recompute retrieval
 
-The API key is read only from the environment; it is never accepted as a CLI
-argument or written to the output. Each JSONL output row includes the retrieval
-mode, candidate tables, selected tables, integration plan, SQL, evidence,
-answer, call count, and latency.
-
-## What the pipeline implements
-
-1. Replay the original open-domain retriever's cached ranked table IDs.
-2. Ask an LLM to select tables and choose `single`, `join`, or `union`.
-3. Ask an LLM for read-only SQLite, validate it, execute it, and retry on error.
-4. Generate one grounded answer sentence from the selected tables and SQL result.
-
-Like the original `AgenticTQA/agent_team/agents.py`, the default answer policy
-falls back to the LLM's internal knowledge when retrieved evidence is
-insufficient and forbids refusal text. Use `--strict-grounded` to disable this
-behavior for applications where provenance matters more than matching the
-original experiment.
-
-The bundled sample defaults to top-5, matching the original agent code. Use
-`--top-k 10` to expose all cached candidates. Missing relevant tables are not
-silently added: questions 26, 28, and others preserve genuine retrieval errors.
-
-An oracle-table smoke test is available for debugging the downstream agents:
-
-```bash
-agentictqa run --retrieval oracle --strict-grounded \
-  --output outputs/fetaqa_10_oracle.jsonl
-```
-
-Oracle mode is a closed-domain diagnostic and must not be compared to or
-reported as the paper's open-domain result.
-
-## Repository layout
+Retriever code is included under `src/agentictqa/retriever/legacy/`. Models,
+the FeTaQA FAISS index, and the dataset catalog are intentionally not committed.
+Place those local assets in this layout:
 
 ```text
-AgenticTQA_release/
-├── pyproject.toml
-├── README.md
-├── DATA_LICENSE.md
-├── results/            # verified live-run trace and configuration
-├── src/agentictqa/
-│   ├── cli.py          # run / evaluate commands
-│   ├── data.py         # FeTaQA-10 loader and cached retrieval
-│   ├── llm.py          # OpenAI-compatible JSON client
-│   ├── metrics.py      # exact archived macro ROUGE
-│   ├── pipeline.py     # agentic orchestration and safe SQL
-│   └── resources/      # 10 questions, predictions, 100 small tables
-└── tests/
+retriever_assets/
+├── checkpoints/fetaqa_fusion.pt
+├── index/on_disk_index_FeTaQA_rel_graph/
+│   ├── merged_index.ivfdata
+│   ├── passages.jsonl
+│   └── populated.index
+└── models/
+    ├── student_tqa_retriever_step_29500/
+    ├── tqa_reader_base/
+    └── tqa_retriever/
+
+datasets_agentic_tqa/
+└── FeTaQA/labels/tables_numid.jsonl
 ```
 
-Run the offline test suite:
+Then run the actual three-stage retriever and optionally save its ranked output
+as a reusable cache:
+
+```bash
+python -m pip install -e '.[retriever]'
+CUDA_VISIBLE_DEVICES=0 agentictqa run \
+  --retrieval live \
+  --assets-root retriever_assets \
+  --dataset-root datasets_agentic_tqa \
+  --fusion-checkpoint retriever_assets/checkpoints/fetaqa_fusion.pt \
+  --write-retrieval-cache outputs/fetaqa_10_retrieval.jsonl \
+  --output outputs/fetaqa_10_live.jsonl
+```
+
+The stages are student dense retrieval against the on-disk FAISS index,
+teacher passage reranking, and BNN fusion table reranking. Each live run writes
+its queries, dense candidates, tagged candidates, and fusion traces to a new
+directory under `outputs/retriever/`; it never deletes an existing run. See
+[RETRIEVER.md](RETRIEVER.md) for the exact execution flow and path mapping.
+
+## Pipeline
+
+1. Retrieve ranked table IDs from the committed open-domain cache or live retriever.
+2. Select relevant tables and plan a single-table, join, or union operation.
+3. Generate and validate read-only SQLite, then execute it with retry-on-error.
+4. Produce one concise answer from the table and SQL evidence.
+
+The OpenAI-compatible API key is read only from the environment and is never
+written to traces. `--strict-grounded` disables the original implementation's
+parametric fallback.
+
+## Layout
+
+```text
+src/agentictqa/
+├── cli.py
+├── data.py
+├── metrics.py
+├── pipeline.py
+├── resources/fetaqa_10/       # questions, open-domain cache, predictions, tables
+└── retriever/
+    ├── cache.py               # cached open-domain replay
+    ├── runner.py              # configurable, non-destructive execution wrapper
+    └── legacy/                # original dense + teacher + BNN retriever source
+```
+
+Run offline checks with:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-## Scope and limitations
+## Scope
 
-- Ten examples are a smoke/reproducibility slice, not a statistically reliable
-  estimate of full-test-set performance.
-- Retrieval is replayed from the original cache. The 1.5 GB index and multi-GB
-  checkpoints are deliberately excluded, so this release does not recompute
-  dense retrieval.
-- Live answers depend on the model and serving backend. Only the archived
-  prediction artifact is deterministic.
-- The default parametric fallback can improve answer coverage after retrieval
-  failures, but those answers are not grounded in the bundled tables. Use
-  `--strict-grounded` when every answer must be traceable to table evidence.
-- The default model reflects what was available on the configured Nebius
-  endpoint when this release was validated; override it when providers rotate
-  model IDs.
-- The original metric is included for exact comparison; it is not claimed to be
-  interchangeable with every third-party `rouge-score` implementation.
-
-## License and data attribution
-
-Code is MIT licensed. The bundled FeTaQA-derived sample is separately licensed
-under CC BY-SA 4.0; see [DATA_LICENSE.md](DATA_LICENSE.md). FeTaQA was introduced
-by Nan et al., *Transactions of the Association for Computational Linguistics*,
-2022. Please cite the original dataset when using this sample.
+- Ten examples are a reproducibility slice, not a full benchmark estimate.
+- Cached retrieval is deterministic; live LLM answers depend on the serving model.
+- The legacy live retriever expects CUDA and downloads the standard
+  `bert-base-uncased` and `t5-base` tokenizers if they are not already cached.
+- Original ArrTab code is MIT licensed. Bundled FeTaQA-derived data is CC BY-SA
+  4.0, while vendored FiD-derived files retain CC BY-NC 4.0 terms; see
+  [DATA_LICENSE.md](DATA_LICENSE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
